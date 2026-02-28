@@ -108,6 +108,20 @@ func (e *GeminiCLIExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth
 	}
 	baseModel := thinking.ParseSuffix(req.Model).ModelName
 
+	action := "generateContent"
+	if req.Metadata != nil {
+		if a, _ := req.Metadata["action"].(string); a == "countTokens" {
+			action = "countTokens"
+		}
+	}
+
+	projectID := resolveGeminiProjectID(auth)
+	if action != "countTokens" {
+		if errValidate := validateGeminiCLIProjectID(projectID); errValidate != nil {
+			return resp, errValidate
+		}
+	}
+
 	tokenSource, baseTokenData, err := prepareGeminiCLITokenSource(ctx, e.cfg, auth)
 	if err != nil {
 		return resp, err
@@ -136,14 +150,6 @@ func (e *GeminiCLIExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth
 	requestedModel := payloadRequestedModel(opts, req.Model)
 	basePayload = applyPayloadConfigWithRoot(e.cfg, baseModel, "gemini", "request", basePayload, originalTranslated, requestedModel)
 
-	action := "generateContent"
-	if req.Metadata != nil {
-		if a, _ := req.Metadata["action"].(string); a == "countTokens" {
-			action = "countTokens"
-		}
-	}
-
-	projectID := resolveGeminiProjectID(auth)
 	models := cliPreviewFallbackOrder(baseModel)
 	if len(models) == 0 || models[0] != baseModel {
 		models = append([]string{baseModel}, models...)
@@ -262,6 +268,11 @@ func (e *GeminiCLIExecutor) ExecuteStream(ctx context.Context, auth *cliproxyaut
 	}
 	baseModel := thinking.ParseSuffix(req.Model).ModelName
 
+	projectID := resolveGeminiProjectID(auth)
+	if errValidate := validateGeminiCLIProjectID(projectID); errValidate != nil {
+		return nil, errValidate
+	}
+
 	tokenSource, baseTokenData, err := prepareGeminiCLITokenSource(ctx, e.cfg, auth)
 	if err != nil {
 		return nil, err
@@ -289,8 +300,6 @@ func (e *GeminiCLIExecutor) ExecuteStream(ctx context.Context, auth *cliproxyaut
 	basePayload = fixGeminiCLIImageAspectRatio(baseModel, basePayload)
 	requestedModel := payloadRequestedModel(opts, req.Model)
 	basePayload = applyPayloadConfigWithRoot(e.cfg, baseModel, "gemini", "request", basePayload, originalTranslated, requestedModel)
-
-	projectID := resolveGeminiProjectID(auth)
 
 	models := cliPreviewFallbackOrder(baseModel)
 	if len(models) == 0 || models[0] != baseModel {
@@ -693,6 +702,16 @@ func resolveGeminiProjectID(auth *cliproxyauth.Auth) string {
 		}
 	}
 	return strings.TrimSpace(stringValue(auth.Metadata, "project_id"))
+}
+
+func validateGeminiCLIProjectID(projectID string) error {
+	if strings.TrimSpace(projectID) != "" {
+		return nil
+	}
+	return statusErr{
+		code: http.StatusBadRequest,
+		msg:  "gemini-cli auth metadata missing project_id; re-authenticate with a selected project",
+	}
 }
 
 func geminiOAuthMetadata(auth *cliproxyauth.Auth) map[string]any {

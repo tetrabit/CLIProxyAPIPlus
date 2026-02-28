@@ -70,8 +70,10 @@ func DoLogin(cfg *config.Config, projectID string, options *LoginOptions) {
 		NoBrowser:    options.NoBrowser,
 		ProjectID:    trimmedProjectID,
 		CallbackPort: options.CallbackPort,
-		Metadata:     map[string]string{},
-		Prompt:       callbackPrompt,
+		Metadata: map[string]string{
+			"defer_onboarding": "true",
+		},
+		Prompt: callbackPrompt,
 	}
 
 	authenticator := sdkAuth.NewGeminiAuthenticator()
